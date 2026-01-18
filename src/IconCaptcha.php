@@ -127,25 +127,22 @@ class IconCaptcha
     /**
      * 验证操作路径是否与答案匹配。
      *
-     * @param array $operation_path 操作路径数组，每个元素是一个表示路径的点数组
+     * @param array $pos 操作路径数组，每个元素是一个表示点击位置
      * @param array $answer 答案数组，每个元素是一个矩形范围[minX, minY, maxX, maxY]，表示允许的坐标范围
      * @return bool 如果所有操作路径的终点都在对应的答案矩形范围内，则返回true；否则返回false
      */
-    public function verify(array $operation_path, array $answer): bool
+    public function verify(array $clickPositions, array $answer): bool
     {
         // 简单的数量校验
-        if (count($operation_path) !== count($answer)) {
+        if (count($clickPositions) !== count($answer)) {
             return false;
         }
 
-        foreach ($operation_path as $index => $path) {
-            $endPoint = end($path); // 获取路径最后一点
-            if (!isset($endPoint[0], $endPoint[1])) return false;
-
-            $x = (int)$endPoint[0];
-            $y = (int)$endPoint[1];
-
-            $box = $answer[$index] ?? null;
+        $i = 0;
+        foreach ($clickPositions as $xy) {
+            if (count($xy) !== 2) return false;
+            [$x, $y] = $xy;
+            $box = $answer[$i] ?? null;
             if (!$box) return false;
 
             // 检查坐标是否在矩形范围内
@@ -153,6 +150,8 @@ class IconCaptcha
             if ($x < $box[0] || $x > $box[2] || $y < $box[1] || $y > $box[3]) {
                 return false;
             }
+
+            $i++;
         }
 
         return true;
@@ -267,10 +266,14 @@ class IconCaptcha
             $bbox = imagettfbbox($size, $angle, $this->fontPath, $char);
 
             // 修正 bbox 坐标到绝对坐标
-            $x0 = $bbox[0] + $x; $y0 = $bbox[1] + $y;
-            $x1 = $bbox[2] + $x; $y1 = $bbox[3] + $y;
-            $x2 = $bbox[4] + $x; $y2 = $bbox[5] + $y;
-            $x3 = $bbox[6] + $x; $y3 = $bbox[7] + $y;
+            $x0 = $bbox[0] + $x;
+            $y0 = $bbox[1] + $y;
+            $x1 = $bbox[2] + $x;
+            $y1 = $bbox[3] + $y;
+            $x2 = $bbox[4] + $x;
+            $y2 = $bbox[5] + $y;
+            $x3 = $bbox[6] + $x;
+            $y3 = $bbox[7] + $y;
 
             // 获取绝对 AABB 包围盒 (Axis Aligned Bounding Box)
             $minX = min($x0, $x1, $x2, $x3) - 2;
