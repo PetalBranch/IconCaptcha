@@ -1,20 +1,23 @@
 {
-    "name": "petalbranch/icon-captcha",
-    "description": "IconCaptcha is a lightweight and secure PHP library for generating image-based click CAPTCHA challenges using open-source icon fonts (e.g., Font Awesome).",
-    "license": "Apache-2.0",
-    "autoload": {
-        "psr-4": {
-            "Petalbranch\\IconCaptcha\\": "src/"
-        }
+  "name": "petalbranch/icon-captcha",
+  "description": "IconCaptcha is a lightweight and secure PHP library for generating image-based click CAPTCHA challenges using open-source icon fonts (e.g., Font Awesome).",
+  "license": "Apache-2.0",
+  "autoload": {
+    "psr-4": {
+      "Petalbranch\\IconCaptcha\\": "src/"
     },
-    "authors": [
-        {
-            "name": "Petalbranch",
-            "email": "branch@petalmail.com"
-        }
-    ],
-    "require": {
-      "ext-gd": "*",
-      "ext-mbstring": "*"
+    "files": [
+      "src/function.php"
+    ]
+  },
+  "authors": [
+    {
+      "name": "Petalbranch",
+      "email": "branch@petalmail.com"
     }
+  ],
+  "require": {
+    "ext-gd": "*",
+    "ext-mbstring": "*"
+  }
 }

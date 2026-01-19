@@ -127,7 +127,7 @@ class IconCaptcha
     /**
      * 验证操作路径是否与答案匹配。
      *
-     * @param array $pos 操作路径数组，每个元素是一个表示点击位置
+     * @param array $clickPositions 操作路径数组，每个元素是一个表示点击位置
      * @param array $answer 答案数组，每个元素是一个矩形范围[minX, minY, maxX, maxY]，表示允许的坐标范围
      * @return bool 如果所有操作路径的终点都在对应的答案矩形范围内，则返回true；否则返回false
      */
