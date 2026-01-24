@@ -140,8 +140,17 @@ class IconCaptcha
 
         $i = 0;
         foreach ($clickPositions as $xy) {
+            if (!is_array($xy)) return false;
             if (count($xy) !== 2) return false;
-            [$x, $y] = $xy;
+            if (isset($xy['x']) && isset($xy['y'])) {
+                $x = $xy['x'];
+                $y = $xy['y'];
+            } elseif (array_keys($xy) === range(0, count($xy) - 1)) {
+                [$x, $y] = array_values($xy);
+            } else {
+                return false;
+            }
+
             $box = $answer[$i] ?? null;
             if (!$box) return false;
 
