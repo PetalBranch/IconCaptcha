@@ -26,42 +26,71 @@ composer require petalbranch/icon-captcha
 
 在你的控制器（Controller）中生成验证码数据：
 
-  ```php
-  <?php
-  
-  use Illuminate\Support\Facades\Redis; // 示例使用 Laravel Redis Facade
-  
-  // 1. 生成验证码
-  // 参数可选：icon_captcha_generate(宽度, 高度, 图标数, 干扰数);
-  $captcha = icon_captcha_generate(320, 200, 4, 2);
-  
-  // 返回结构:
-  // [
-  //    'id'     => 'captcha_65b7...', 
-  //    'image'  => 'base64_string...', // 验证码背景图
-  //    'icons'  => ['base64...', ...], // 需点击的目标图标列表
-  //    'answer' => [[x,y,X,Y], ...]    // 正确答案坐标范围 (敏感数据!)
-  // ]
-  
-  $id = $captcha['id'];
-  $answer = $captcha['answer'];
-  
-  // 2.【关键】存储答案到服务端缓存（例如 Redis 或 Session）
-  // 建议设置较短的过期时间，例如 2-5 分钟
-  Redis::setex("captcha:{$id}", 300, json_encode($answer));
-  
-  // 3. 返回给前端（排除 answer 字段）
-  $response = [
-      'id'    => $id,
-      'image' => $captcha['image'], // 前端: <img src="data:image/png;base64,{{image}}" />
-      'icons' => $captcha['icons']  // 前端: 遍历展示这组小图标提示用户点击
-  ];
-  
-  header('Content-Type: application/json');
-  echo json_encode($response);
-  ```
+```php
+<?php
 
-2. 验证验证码
+use Illuminate\Support\Facades\Redis; // 示例使用 Laravel Redis Facade
+
+// 1. 生成验证码
+// 参数可选：icon_captcha_generate(宽度, 高度, 图标数, 干扰数);
+$captcha = icon_captcha_generate(320, 200, 4, 2);
+
+// 返回结构详解:
+// [
+//    'id'     => 'ic.65b7...', 
+//    'image'  => 'base64_string...', // 主图 Base64 (不含前缀)
+//    'mime'   => 'image/webp',       // 主图 MIME 类型 (image/webp 或 image/png)
+//    'icons'  => ['base64...', ...], // 提示图标 Base64 数组 (固定为 PNG 格式)
+//    'answer' => [[x,y,X,Y], ...]    // 正确答案坐标范围 (敏感数据! 勿传前端)
+// ]
+
+$id = $captcha['id'];
+$answer = $captcha['answer'];
+
+// 2.【关键】存储答案到服务端缓存（例如 Redis 或 Session）
+// 建议设置较短的过期时间，例如 2-5 分钟
+Redis::setex("captcha:{$id}", 300, json_encode($answer));
+
+// 3. 返回给前端（排除 answer 字段）
+$response = [
+    'id'    => $id,
+    'image' => $captcha['image'], // 前端: src="data:{{mime}};base64,{{image}}"
+    'mime'  => $captcha['mime'],  // 这里会返回 image/webp 或 image/png
+    'icons' => $captcha['icons']  // 前端: 遍历展示这组小图标提示用户点击
+];
+
+header('Content-Type: application/json');
+echo json_encode($response);
+```
+
+2. 前端展示说明 (客户端)
+前端在接收到数据后，需要注意 主图 和 提示图标 的 Base64 前缀处理方式不同。
+- 主图 (`image`)：可能是 WebP 或 PNG，需根据返回的 mime 字段动态拼接。
+- 提示图标 (`icons`)：为了保持透明背景，统一固定为 PNG 格式。
+
+HTML/JS 拼接示例：
+```javascript
+// 假设 res 是后端返回的 JSON 数据
+const data = res.data;
+
+// 1. 渲染主验证码图片 (根据 mime 动态拼接)
+// 格式: data:{mime};base64,{image}
+const mainImgSrc = `data:${data.mime};base64,${data.image}`;
+document.getElementById('captcha-image').src = mainImgSrc;
+
+// 2. 渲染提示小图标 (固定为 image/png)
+// 格式: data:image/png;base64,{icon}
+data.icons.forEach(iconBase64 => {
+const iconSrc = `data:image/png;base64,${iconBase64}`;
+// ... 创建 img 标签并追加到 DOM ...
+const img = document.createElement('img');
+img.src = iconSrc;
+document.getElementById('icon-container').appendChild(img);
+});
+```
+
+
+3. 验证验证码 (服务端)
 
 前端收集用户的点击坐标后，提交到验证接口：
 
@@ -117,6 +146,7 @@ composer require petalbranch/icon-captcha
 **流程：**
 1. **前端**：用户点击 -> 获得坐标数组 -> JSON序列化 -> **加密** (AES/RSA) -> 发送密文。
 2. **后端**：接收密文 -> **解密** -> 获得坐标数组 -> 调用 `icon_captcha_verify`。
+> 具体代码示例请参考项目 examples 或根据自身业务逻辑实现。
 ---
 - 前端加密 (示例)
 
@@ -183,14 +213,15 @@ if (icon_captcha_verify($clickPositions, $answer)) {
 
 
 ## ⚙️ 参数配置
-| **参数**                   | **类型**           | **默认值** | **说明**        |
-|--------------------------|------------------|---------|---------------|
-| `$width`                 | int              | 320     | 验证码图片宽度       |
-| `$height`                | int              | 200     | 验证码图片高度       |
-| `$length`                | int              | 4       | 需要用户点击的正确图标数量 |
-| `$decoyIconCount`        | int              | 2       | 干扰图标数量（不计入答案） |
-| `$iconSet`               | IconSetInterface | null    | 自定义字体集实例      |
-| `$backgroundImageFolder` | string           | null    | 自定义背景图片文件夹路径  |
+| **参数**                   | **类型**           | **默认值** | **说明**                           |
+|--------------------------|------------------|---------|----------------------------------|
+| `$width`                 | int              | 320     | 验证码图片宽度                          |
+| `$height`                | int              | 200     | 验证码图片高度                          |
+| `$length`                | int              | 4       | 需要用户点击的正确图标数量                    |
+| `$decoyIconCount`        | int              | 2       | 干扰图标数量（不计入答案）                    |
+| `$iconSet`               | IconSetInterface | null    | 自定义字体集实例                         |
+| `$backgroundImageFolder` | string           | null    | 自定义背景图片文件夹路径                     |
+| `$useWebp`               | bool             | true    | 优先使用 WebP 格式（体积更小），若不支持自动回退到 PNG |
 
 
 ## 🎨 高级用法

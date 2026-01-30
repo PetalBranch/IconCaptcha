@@ -76,7 +76,8 @@ class IconCaptcha
         ?int $width = null,
         ?int $height = null,
         ?int $length = null,
-        ?int $decoyIconCount = null
+        ?int $decoyIconCount = null,
+        bool $useWebp = true
     ): array
     {
         $this->initResources(); // 只有生成时才加载资源
@@ -136,7 +137,14 @@ class IconCaptcha
 
         // 输出
         ob_start();
-        imagepng($canvas);
+        if ($useWebp && function_exists('imagewebp')) {
+            // WebP 质量范围 0-100，80 是很好的平衡点
+            imagewebp($canvas, null, 80);
+            $mimeType = 'image/webp';
+        } else {
+            imagepng($canvas, null, 6);
+            $mimeType = 'image/png';
+        }
         $imageData = ob_get_clean();
         imagedestroy($canvas);
 
@@ -144,6 +152,7 @@ class IconCaptcha
             'id' => uniqid("ic.", true),
             'image' => base64_encode($imageData),
             'icons' => $iconBase64,
+            'mime' => $mimeType,
             'answer' => $answerData // 注意：answer中包含正确坐标，由调用者负责存储，不输出给前端
         ];
     }
@@ -334,7 +343,7 @@ class IconCaptcha
         imagettftext($canvas, $size, 0, $x, $y, $color, $this->fontPath, $char);
 
         ob_start();
-        imagepng($canvas);
+        imagepng($canvas, null, 6);
         $data = ob_get_clean();
         imagedestroy($canvas);
 

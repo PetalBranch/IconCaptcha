@@ -5,7 +5,8 @@ use Petalbranch\IconCaptcha\IconCaptcha;
 
 if (!function_exists('icon_captcha_generate')) {
     /**
-     * 生成验证码
+     * 生成验证码<br>
+     * ⚠️ 注意：返回结果包含 answer，由调用方负责存储到 Session/Cache，切勿直接返回给前端。
      *
      * @param int|null $width 验证码宽度 默认 320
      * @param int|null $height 验证码高度 默认 200
@@ -20,11 +21,12 @@ if (!function_exists('icon_captcha_generate')) {
         ?int              $length = null,
         ?int              $decoyIconCount = null,
         ?IconSetInterface $iconSet = null,
-        ?string           $backgroundImageFolder = null
+        ?string           $backgroundImageFolder = null,
+        bool              $useWebp = true
     ): array
     {
         $ic = new IconCaptcha(iconSet: $iconSet, backgroundImageFolder: $backgroundImageFolder);
-        return $ic->generate($width, $height, $length, $decoyIconCount);
+        return $ic->generate($width, $height, $length, $decoyIconCount, $useWebp);
 
     }
 }
