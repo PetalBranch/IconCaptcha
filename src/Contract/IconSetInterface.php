@@ -7,10 +7,10 @@ interface IconSetInterface
     /**
      * 构造函数
      *
-     * @param string $FontFilePath 要使用的字体文件路径。
+     * @param string $fontFilePath 要使用的字体文件路径。
      * @return void
      */
-    public function __construct(string $FontFilePath);
+    public function __construct(string $fontFilePath);
 
     /**
      * 获取图标名称及其对应 Unicode 值的关联数组。

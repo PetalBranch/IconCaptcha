@@ -6,7 +6,6 @@ use Exception;
 use GdImage;
 use Petalbranch\IconCaptcha\Contract\IconSetInterface;
 use Random\RandomException;
-use RuntimeException;
 
 /**
  * IconCaptcha 类用于生成基于图标的验证码。
@@ -18,30 +17,60 @@ class IconCaptcha
 {
     private string $fontPath;
     private array $backgroundImages = [];
+    private bool $resourcesLoaded = false;
 
     /**
      * @throws Exception
      */
     public function __construct(
-        private readonly int      $width = 320,      // 图片宽度
-        private readonly int      $height = 200,      // 图片高度
-        private readonly int      $iconCount = 4,    // 生成几个图标
-        private readonly int      $decoyIconCount = 2, //干扰图标数量
-        private readonly int      $fontSizeMin = 16,    // 图标最小值
-        private readonly int      $fontSizeMax = 32,    // 图标最大值
-        private readonly int      $offsetAngle = 100,      // 允许±偏移角度 0 ~ 180度
-        private ?IconSetInterface $iconSet = null,    // 允许外部传入字体路径
-        private ?string           $backgroundImageFolder = null // 背景图文件夹支持jpg、png，随机取图
+        private readonly int      $width = 320,                 // 图片宽度
+        private readonly int      $height = 200,                // 图片高度
+        private readonly int      $iconCount = 4,               // 生成几个图标
+        private readonly int      $decoyIconCount = 2,          // 干扰图标数量
+        private readonly int      $fontSizeMin = 16,            // 图标最小值
+        private readonly int      $fontSizeMax = 32,            // 图标最大值
+        private readonly int      $offsetAngle = 40,            // 允许±偏移角度 0 ~ 180度
+        private readonly int      $verifyMargin = 5,            // 允许5像素的点击误差
+        private ?IconSetInterface $iconSet = null,              // 允许外部传入字体路径
+        private ?string           $backgroundImageFolder = null // 背景图文件夹
     )
     {
-        $this->iconSet = $this->iconSet ?? new IconSet(dirname(__DIR__) . '/resources/fonts/fontawesomefree/fa-solid-900.ttf');
-        $this->fontPath = $this->iconSet->getFontPath();
         $this->backgroundImageFolder = $this->backgroundImageFolder ?? dirname(__DIR__) . '/resources/background/';
-        $this->loadBackgroundImages();
     }
 
     /**
+     * 初始化资源 (懒加载)
+     *
+     * @throws Exception
+     */
+    private function initResources(): void
+    {
+        if ($this->resourcesLoaded) return;
+
+        // 初始化字体集
+        $this->iconSet = $this->iconSet ?? new IconSet(dirname(__DIR__) . '/resources/fonts/fontawesomefree/fa-solid-900.ttf');
+        $this->fontPath = $this->iconSet->getFontPath();
+
+        // 加载背景图列表
+        if (!is_dir($this->backgroundImageFolder)) return;
+
+        $folder = rtrim($this->backgroundImageFolder, '/\\') . DIRECTORY_SEPARATOR;
+        foreach (['jpg', 'jpeg', 'png'] as $ext) {
+            $files = glob($folder . "*." . $ext);
+            if ($files) {
+                foreach ($files as $f) $this->backgroundImages[] = basename($f);
+            }
+        }
+        $this->backgroundImages = array_unique($this->backgroundImages);
+        $this->resourcesLoaded = true;
+    }
+
+    /**
+     * 生成验证码
+     * ⚠️ 注意：返回结果包含 answer，由调用方负责存储到 Session/Cache，切勿直接返回给前端。
+     *
      * @throws RandomException
+     * @throws Exception
      */
     public function generate(
         ?int $width = null,
@@ -50,58 +79,54 @@ class IconCaptcha
         ?int $decoyIconCount = null
     ): array
     {
+        $this->initResources(); // 只有生成时才加载资源
+
         $width = $width ?? $this->width;
         $height = $height ?? $this->height;
         $length = $length ?? $this->iconCount;
         $decoyIconCount = $decoyIconCount ?? $this->decoyIconCount;
 
-        if (empty($this->backgroundImages)) {
-            throw new RuntimeException('No background images found.');
-        }
 
         $canvas = imagecreatetruecolor($width, $height);
 
-        // --- 背景处理 (保持你的逻辑) ---
-        $randomBgFile = $this->backgroundImages[array_rand($this->backgroundImages)];
-        $bgImage = $this->loadImage($this->backgroundImageFolder . $randomBgFile);
+        // --- 背景处理 ---
+        if (!empty($this->backgroundImages)) {
+            $randomBgFile = $this->backgroundImages[array_rand($this->backgroundImages)];
+            $bgImage = $this->loadImage($this->backgroundImageFolder . $randomBgFile);
 
-        if ($bgImage) {
-            imagefilter($bgImage, IMG_FILTER_GAUSSIAN_BLUR);
-            $bgW = imagesx($bgImage);
-            $bgH = imagesy($bgImage);
+            if ($bgImage) {
+                $bgW = imagesx($bgImage);
+                $bgH = imagesy($bgImage);
 
-            // 智能裁剪/缩放
-            if ($bgW < $width || $bgH < $height) {
-                imagecopyresampled($canvas, $bgImage, 0, 0, 0, 0, $width, $height, $bgW, $bgH);
-            } else {
-                imagecopy($canvas, $bgImage, 0, 0, random_int(0, $bgW - $width), random_int(0, $bgH - $height), $width, $height);
+                // 智能裁剪 (随机取景)
+                $srcX = random_int(0, max(0, $bgW - $width));
+                $srcY = random_int(0, max(0, $bgH - $height));
+                imagecopy($canvas, $bgImage, 0, 0, $srcX, $srcY, $width, $height);
+                imagedestroy($bgImage);
             }
-            imagedestroy($bgImage);
         } else {
-            // 降级处理：如果没有背景图，填充随机浅色
-            $bgColor = imagecolorallocate($canvas, random_int(200, 250), random_int(200, 250), random_int(200, 250));
-            imagefill($canvas, 0, 0, $bgColor);
+            // 降级处理：如果没有背景图，填充浅灰色背景
+            imagefill($canvas, 0, 0, imagecolorallocate($canvas, 240, 240, 240));
         }
 
         // --- 生成图标 ---
         $totalIcons = $length + $decoyIconCount;
         $iconsData = $this->iconSet->getRandom($totalIcons);
 
-        $iconPositions = []; // 存储坐标用于验证
-        $iconBase64 = [];    // 存储前端显示的提示图标
+        $iconPositions = []; // 用于防重叠检测
+        $iconBase64 = [];    // 前端展示的图标
+        $answerData = [];    // 正确答案坐标（按顺序）
 
         $i = 0;
         foreach ($iconsData as $char) {
-            // 在画布上绘制图标
+            // 绘制并获取位置
             $position = $this->imageChar($canvas, $width, $height, $char, $iconPositions);
+            $iconPositions[] = $position; // 记录位置防止后续图标重叠
 
-            // 如果是前 N 个（正确答案），记录位置并生成提示图
+            // 前 N 个为正确答案，记录位置并生成提示图
             if ($i < $length) {
-                $iconPositions[$i] = $position;
                 $iconBase64[] = $this->baseImageChar($char);
-            } else {
-                // 干扰图标，只记录占位，防止重叠，但不记录为答案
-                $iconPositions['decoy_' . $i] = $position;
+                $answerData[] = $position;
             }
             $i++;
         }
@@ -116,16 +141,15 @@ class IconCaptcha
         imagedestroy($canvas);
 
         return [
-            'id' => uniqid("captcha_", true),
+            'id' => uniqid("ic.", true),
             'image' => base64_encode($imageData),
             'icons' => $iconBase64,
-            // 注意：answer 只包含前 $length 个正确图标的坐标
-            'answer' => array_slice($iconPositions, 0, $length),
+            'answer' => $answerData // 注意：answer中包含正确坐标，由调用者负责存储，不输出给前端
         ];
     }
 
     /**
-     * 验证操作路径是否与答案匹配。
+     * 验证点击（按顺序严格匹配）
      *
      * @param array $clickPositions 操作路径数组，每个元素是一个表示点击位置
      * @param array $answer 答案数组，每个元素是一个矩形范围[minX, minY, maxX, maxY]，表示允许的坐标范围
@@ -138,52 +162,32 @@ class IconCaptcha
             return false;
         }
 
-        $i = 0;
-        foreach ($clickPositions as $xy) {
-            if (!is_array($xy)) return false;
-            if (count($xy) !== 2) return false;
-            if (isset($xy['x']) && isset($xy['y'])) {
-                $x = $xy['x'];
-                $y = $xy['y'];
-            } elseif (array_keys($xy) === range(0, count($xy) - 1)) {
-                [$x, $y] = array_values($xy);
-            } else {
-                return false;
-            }
+        foreach ($clickPositions as $index => $xy) {
 
-            $box = $answer[$i] ?? null;
+            // 坐标格式标准化
+            $x = $xy['x'] ?? $xy[0] ?? null;
+            $y = $xy['y'] ?? $xy[1] ?? null;
+
+            if ($x === null || $y === null) return false;
+
+            // 获取对应的目标答案框 (按顺序)
+            $box = $answer[$index] ?? null;
             if (!$box) return false;
 
-            // 检查坐标是否在矩形范围内
+
+            // 范围检测 (增加 margin 容错)
             // box格式: [minX, minY, maxX, maxY]
-            if ($x < $box[0] || $x > $box[2] || $y < $box[1] || $y > $box[3]) {
+            if (
+                $x < ($box[0] - $this->verifyMargin) ||
+                $x > ($box[2] + $this->verifyMargin) ||
+                $y < ($box[1] - $this->verifyMargin) ||
+                $y > ($box[3] + $this->verifyMargin)
+            ) {
                 return false;
             }
-
-            $i++;
         }
 
         return true;
-    }
-
-    /**
-     * 从指定目录加载背景图像，并将它们的文件名填充到内部列表中。
-     *
-     * @return void
-     * @throws RuntimeException 如果背景图像目录不存在
-     */
-    private function loadBackgroundImages(): void
-    {
-        if (!is_dir($this->backgroundImageFolder)) return;
-
-        $folder = rtrim($this->backgroundImageFolder, '/\\') . DIRECTORY_SEPARATOR;
-        foreach (['jpg', 'jpeg', 'png'] as $ext) {
-            $files = glob($folder . "*." . $ext);
-            if ($files) {
-                foreach ($files as $f) $this->backgroundImages[] = basename($f);
-            }
-        }
-        $this->backgroundImages = array_unique($this->backgroundImages);
     }
 
 
@@ -219,17 +223,10 @@ class IconCaptcha
     private function isOverlapAABB(int $minX, int $minY, int $maxX, int $maxY, array $existingPositions): bool
     {
         foreach ($existingPositions as $pos) {
-            // $pos 格式: [minX, minY, maxX, maxY]
-            // 如果 两个矩形没有重叠，则返回 false
-            // 逻辑：如果不(A在B左边 或 A在B右边 或 A在B上面 或 A在B下面)
-            $noOverlap = (
-                $maxX < $pos[0] || // 当前在已知左边
-                $minX > $pos[2] || // 当前在已知右边
-                $maxY < $pos[1] || // 当前在已知上面
-                $minY > $pos[3]    // 当前在已知下面
-            );
-
-            if (!$noOverlap) return true; // 有重叠
+            // 如果不(无重叠)，就是有重叠
+            if (!($maxX < $pos[0] || $minX > $pos[2] || $maxY < $pos[1] || $minY > $pos[3])) {
+                return true;
+            }
         }
         return false;
     }

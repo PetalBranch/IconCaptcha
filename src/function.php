@@ -11,7 +11,7 @@ if (!function_exists('icon_captcha_generate')) {
      * @param int|null $height 验证码高度 默认 200
      * @param int|null $length 生成图标数量 默认 4
      * @param int|null $decoyIconCount 额外的图标数量 默认 2
-     * @return array 返回当前验证码ID、验证码图片base64编码、图标组base64编码、合法位置
+     * @return array 返回验证码ID、图片base64、图标组base64、以及【需要服务端存储的答案】
      * @throws Exception
      */
     function icon_captcha_generate(
@@ -30,7 +30,7 @@ if (!function_exists('icon_captcha_generate')) {
 }
 
 
-if (function_exists("icon_captcha_verify")) {
+if (!function_exists("icon_captcha_verify")) {
     /**
      * 验证操作路径是否与答案匹配。
      *
