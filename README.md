@@ -111,6 +111,77 @@ composer require petalbranch/icon-captcha
   }
   ```
 
+## 🔐 安全增强：点击位置加密
+为了防止恶意用户直接通过抓包工具篡改或伪造点击坐标，建议在前端对点击位置进行加密，后端解密后再传入 `icon_captcha_verify` 进行校验。
+
+**流程：**
+1. **前端**：用户点击 -> 获得坐标数组 -> JSON序列化 -> **加密** (AES/RSA) -> 发送密文。
+2. **后端**：接收密文 -> **解密** -> 获得坐标数组 -> 调用 `icon_captcha_verify`。
+---
+- 前端加密 (示例)
+
+假设你使用 crypto-js 或其他库对坐标数组进行 AES 加密：
+```javascript
+// 假设用户点击了两个位置
+const rawPositions = [
+    {x: 105, y: 33}, 
+    {x: 210, y: 88}
+];
+
+// 将对象转为 JSON 字符串
+const jsonStr = JSON.stringify(rawPositions);
+
+// 使用你的加密逻辑 (例如 AES)
+// 注意：密钥(Secret)应通过安全方式管理，或使用非对称加密
+const encryptedPayload = MyEncryptionLib.encrypt(jsonStr, 'YOUR_SECRET_KEY');
+
+// 发送给后端
+$.post('/api/verify-captcha', {
+    id: 'captcha_65b7...',
+    ciphertext: encryptedPayload // 传输加密后的字符串
+});
+```
+
+- 后端解密与校验
+
+在 PHP 控制器中，先解密数据，还原成数组格式，再传给验证函数：
+
+```php
+<?php
+
+// 1. 获取加密的 payload
+$ciphertext = $_POST['ciphertext'];
+$id = $_POST['id'];
+
+// 2. 解密 (需与前端加密算法一致)
+try {
+    // 这里的 decrypt 是你项目中封装的解密方法
+    $jsonStr = MySecurity::decrypt($ciphertext, 'YOUR_SECRET_KEY');
+    
+    // 解析为数组
+    $clickPositions = json_decode($jsonStr, true);
+    
+    if (!is_array($clickPositions)) {
+        throw new Exception("无效的数据格式");
+    }
+} catch (Exception $e) {
+    // 解密失败，直接视为验证不通过
+    die(json_encode(['success' => false, 'message' => '非法请求']));
+}
+
+// 3. 从缓存获取正确答案
+$answer = json_decode(Redis::get("captcha:$id"), true);
+
+// 4. 调用库函数进行验证 (传入解密后的原始坐标数组)
+if (icon_captcha_verify($clickPositions, $answer)) {
+    // 验证通过
+} else {
+    // 验证失败
+}
+```
+
+
+
 ## ⚙️ 参数配置
 | **参数**                   | **类型**           | **默认值** | **说明**        |
 |--------------------------|------------------|---------|---------------|
