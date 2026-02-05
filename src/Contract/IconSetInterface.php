@@ -2,6 +2,9 @@
 
 namespace Petalbranch\IconCaptcha\Contract;
 
+/**
+ * IconSetInterface 接口定义了与图标集相关的操作。
+ */
 interface IconSetInterface
 {
     /**
