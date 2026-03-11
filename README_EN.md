@@ -11,6 +11,12 @@ A lightweight, secure, and easy-to-integrate PHP icon-click CAPTCHA library. Use
 - **Extensible**: Allows custom font files (by implementing `IconSetInterface`) and background image folders.
 - **High Performance**: Lazy-loads resources with low memory consumption.
 
+👀 **Schematic diagram**
+> The following image serves as a reference for the display effect of the verification code on the front end, and the specific implementation needs to be done by yourself.
+
+<img src="https://github.com/PetalBranch/resource/blob/main/iconcaptcha-diagram.webp?raw=true" />
+
+
 ## 📦 Installation
 ```bash
 composer require petalbranch/icon-captcha
